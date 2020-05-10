@@ -3,7 +3,7 @@
 #   The function tells you what sheets that the Excel files have.
 #   <PARAMETERS>
 #     -File
-#            System.IO.FileInfo object that represents an Excel file.
+#            System.IO.FileInfo object or a path string represents an Excel file.
 #            You can use a pipeline to pass files to the function as below.
 #            > ls -Filter "*.xlsx" | Get-SheetNamesFromExcel
 #            Even if the input file is not an Excel format, the function opens 
@@ -48,6 +48,15 @@ function global:Get-SheetNamesFromExcel {
     process {
         Set-Variable -Name "book"
         Set-Variable -Name "sheetNames"
+        # convert string to FileInfo when a string was passed
+        if ($File -is [string]) {
+            $File = [System.IO.FileInfo]::new($File)
+            if(-not $File.Exists) {
+                Write-Error "The file was not found. : $File"
+                return
+            }
+        }
+        # start processing a file
         Write-Verbose "processing a file : $($File.fullName)"
         if ($File -isnot [System.IO.FileInfo]) {
             Write-Verbose "The file is not a type of System.IO.FileInfo"
@@ -107,5 +116,5 @@ function global:Get-SheetNamesFromExcel {
 # (b) to search Excel files recursively on the current location 
 #     and write the sheet names and file paths onto a csv file hogehoge.csv
 #     > ls -Recurse -Filter "*.xlsx" | Get-SheetNamesFromExcel | export-csv -path ./hogehoge.csv
-# (c) to print the sheet names of Excel files with password
-#     > ls ./protected.xlsx | Get-SheetNamesFromExcel -AskPassword
+# (c) to print the sheet names of an Excel file with password
+#     > Get-SheetNamesFromExcel -File ./protected.xlsx -AskPassword
