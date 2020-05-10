@@ -12,8 +12,12 @@
 #            When you need type a password to open an Excel file, use the
 #            parameter. You are asked to type a password just once.
 #            The password is used for every protected file passed.
+#     -FindLastCell
+#            You can use the parameter to get the positions of the last used
+#            cells in each sheet. This parameter adds two properties, LastRow and
+#            LastColumn, onto the output object.
 #   <OUTPUT>
-#            PsObject object that has two properties below.
+#            PsCustomObject object that has two properties below.
 #             - "Sheet" : the name of a sheet in the Excel file
 #             - "File"  : System.IO.FileInfo object that were input
 #
@@ -28,7 +32,9 @@ function global:Get-SheetNamesFromExcel {
         [Parameter(Mandatory, ValueFromPipeline)]
         $File,
         [switch]
-        $AskPassword
+        $AskPassword,
+        [switch]
+        $FindLastCell
     )
     begin{
         Set-Variable -Name "excel"
@@ -47,7 +53,6 @@ function global:Get-SheetNamesFromExcel {
     }
     process {
         Set-Variable -Name "book"
-        Set-Variable -Name "sheetNames"
         # convert string to FileInfo when a string was passed
         if ($File -is [string]) {
             $File = [System.IO.FileInfo]::new($File)
@@ -79,23 +84,30 @@ function global:Get-SheetNamesFromExcel {
                 $missing,              # Converter
                 $missing               # AddToMru
             )
-            $sheetNames = $book.sheets | ForEach-Object {$_.name}
-            $book.Close()
-        } catch {
-            Write-Error "something happened while reading the file"
-            if($book){
-                $book.Close()
-                Remove-Variable book
+            # $sheetNames = $book.sheets | ForEach-Object {$_.name}
+            # find the last cell used in each sheet
+            return $book.sheets | ForEach-Object {
+                Write-Verbose "    processing a sheet : $($_.Name)"
+                $tmpObject = New-Object -TypeName PsObject -Property @{Sheet=$_.Name; File=$File}
+                if($FindLastCell) {
+                    $row = $_.UsedRange.Row + $_.UsedRange.Rows.count -1
+                    $column = $_.UsedRange.Column + $_.UsedRange.Columns.count -1
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $row
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $column
+                }
+                $tmpObject
             }
+        } catch {
+            Write-Error "An error happened while reading the file"
+            Write-Error $_.ErrorDetails
+            Write-Error $_.ScriptStackTrace
             return
-        } 
-        remove-variable book
-        Write-Verbose "Sheet Names : $sheetNames"
-        $sheets = $sheetNames | ForEach-Object {
-            New-Object -TypeName PsObject -Property @{Sheet=$_; File=$File}
+        } finally {
+            if($book) {
+                $book.Close()
+            }
+            Remove-Variable book
         }
-        Remove-Variable sheetNames
-        return $sheets
     }
     end {
         # terminate an Excel process 
@@ -118,3 +130,5 @@ function global:Get-SheetNamesFromExcel {
 #     > ls -Recurse -Filter "*.xlsx" | Get-SheetNamesFromExcel | export-csv -path ./hogehoge.csv
 # (c) to print the sheet names of an Excel file with password
 #     > Get-SheetNamesFromExcel -File ./protected.xlsx -AskPassword
+# (d) to get to know the used area roughly in each sheet of the Excel file
+#     > Get-SheetNamesFromExcel -File ./protected.xlsx -AskPassword -FindLastCell
