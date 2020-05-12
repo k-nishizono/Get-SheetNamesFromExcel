@@ -42,6 +42,8 @@ function global:Get-SheetNamesFromExcel {
         $excel.Visible = $false
         $excel.DisplayAlerts = $false
 
+        Set-Variable -Name "password"
+        $password = [System.Type]::Missing
         if($AskPassword){
             [securestring] $securedPassword = Read-Host -Prompt "Enter a password" -AsSecureString
             if($securedPassword.Length -gt 0) {
@@ -74,7 +76,7 @@ function global:Get-SheetNamesFromExcel {
                 0,                     # UpdateLinks
                 $true,                 # ReadOnly
                 $missing,              # Format
-                $password ?? $missing, # Password
+                $password,             # Password
                 $missing,              # WriteResPassword
                 $true,                 # IgnoreReadOnlyRecommended
                 $missing,              # Origin
