@@ -16,6 +16,10 @@
 #            You can use the parameter to get the positions of the last used
 #            cells in each sheet. This parameter adds two properties, LastRow and
 #            LastColumn, onto the output object.
+#     -FindLastCellIgnoringFormatted
+#            The FindLastCellIgnoringFormatted finds the last cell with value in
+#            contrast with that the FindLastCell finds the last cell formatted or
+#            with value.
 #   <OUTPUT>
 #            PsCustomObject object that has two properties below.
 #             - "Sheet" : the name of a sheet in the Excel file
@@ -34,7 +38,9 @@ function global:Get-SheetNamesFromExcel {
         [switch]
         $AskPassword,
         [switch]
-        $FindLastCell
+        $FindLastCell,
+        [switch]
+        $FindLastCellIgnoringFormatted
     )
     begin{
         Set-Variable -Name "excel"
@@ -86,14 +92,54 @@ function global:Get-SheetNamesFromExcel {
                 $missing,              # Converter
                 $missing               # AddToMru
             )
-            # $sheetNames = $book.sheets | ForEach-Object {$_.name}
             # find the last cell used in each sheet
             return $book.sheets | ForEach-Object {
                 Write-Verbose "    processing a sheet : $($_.Name)"
                 $tmpObject = New-Object -TypeName PsObject -Property @{Sheet=$_.Name; File=$File}
-                if($FindLastCell) {
-                    $row = $_.UsedRange.Row + $_.UsedRange.Rows.count -1
-                    $column = $_.UsedRange.Column + $_.UsedRange.Columns.count -1
+                if($FindLastCell -and -not $FindLastCellIgnoringFormatted) {
+                    $row = $_.UsedRange.Row + $_.UsedRange.Rows.count - 1
+                    $column = $_.UsedRange.Column + $_.UsedRange.Columns.count - 1
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $row
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $column
+                }
+                if($FindLastCellIgnoringFormatted){
+                    $rows = $_.UsedRange.Rows
+                    $columns = $_.UsedRange.Columns
+                    # find a last row which has any value
+                    Set-Variable -Name "toLastRowWithValue"
+                    for(
+                        $toLastRowWithValue = $rows.count;
+                        $toLastRowWithValue -gt 0;
+                        $toLastRowWithValue--
+                    ){
+                        if($rows.Item($toLastRowWithValue).value2 -join "" -notlike ""){
+                            break;
+                        }
+                    }
+                    # find a last column which has any value
+                    Set-Variable -Name "toLastColumnWithValue"
+                    for(
+                        $toLastColumnWithValue = $columns.count;
+                        $toLastColumnWithValue -gt 0;
+                        $toLastColumnWithValue--
+                    ){
+                        if($columns.Item($toLastColumnWithValue).value2 -join "" -notlike ""){
+                            break;
+                        }
+                    }
+
+                    Set-Variable -Name "row"
+                    Set-Variable -Name "column"
+                    if($toLastRowWithValue -eq 0) {
+                        $row = 1;
+                    } else {
+                        $row = $_.UsedRange.Row + $toLastRowWithValue - 1
+                    }
+                    if($toLastColumnWithValue -eq 0) {
+                        $column = 1;
+                    } else {
+                        $column = $_.UsedRange.Column + $toLastColumnWithValue - 1
+                    }
                     Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $row
                     Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $column
                 }
