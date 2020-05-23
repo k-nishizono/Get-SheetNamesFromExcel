@@ -65,14 +65,14 @@ function global:Get-SheetNamesFromExcel {
         if ($File -is [string]) {
             $File = [System.IO.FileInfo]::new($File)
             if(-not $File.Exists) {
-                Write-Error "The file was not found. : $File"
+                Write-Error "The file is not found. : $File"
                 return
             }
         }
         # start processing a file
         Write-Verbose "processing a file : $($File.fullName)"
         if ($File -isnot [System.IO.FileInfo]) {
-            Write-Verbose "The file is not a type of System.IO.FileInfo"
+            Write-Verbose "The file is not a type of System.IO.FileInfo. : $($file.getType())"
             return
         }
         $missing = [System.Type]::Missing
@@ -96,54 +96,53 @@ function global:Get-SheetNamesFromExcel {
             return $book.sheets | ForEach-Object {
                 Write-Verbose "    processing a sheet : $($_.Name)"
                 $tmpObject = New-Object -TypeName PsObject -Property @{Sheet=$_.Name; File=$File}
-                if($FindLastCell -and -not $FindLastCellIgnoringFormatted) {
-                    $row = $_.UsedRange.Row + $_.UsedRange.Rows.count - 1
-                    $column = $_.UsedRange.Column + $_.UsedRange.Columns.count - 1
-                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $row
-                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $column
-                }
-                if($FindLastCellIgnoringFormatted){
+                if($FindLastCell -or $FindLastCellIgnoringFormatted) {
+                    # The point (x,y) is on the left-top in the UsedRange, which is formatted or with value
+                    $y = $_.UsedRange.Row
+                    $x = $_.UsedRange.Column
+                    # The UsedRange
                     $rows = $_.UsedRange.Rows
                     $columns = $_.UsedRange.Columns
-                    # find a last row which has any value
-                    Set-Variable -Name "toLastRowWithValue"
-                    for(
-                        $toLastRowWithValue = $rows.count;
-                        $toLastRowWithValue -gt 0;
-                        $toLastRowWithValue--
-                    ){
-                        if($rows.Item($toLastRowWithValue).value2 -join "" -notlike ""){
-                            break;
-                        }
+                    # Find the point (lastX,lastY)
+                    Set-Variable -Name "lastY"
+                    Set-Variable -Name "lastX"
+                    # FindLastCell
+                    if ($FindLastCell -and -not $FindLastCellIgnoringFormatted) {
+                        $height = $rows.count
+                        $width = $columns.count
+                        $lastY = $y + $height - 1
+                        $lastX = $x + $width - 1
                     }
-                    # find a last column which has any value
-                    Set-Variable -Name "toLastColumnWithValue"
-                    for(
-                        $toLastColumnWithValue = $columns.count;
-                        $toLastColumnWithValue -gt 0;
-                        $toLastColumnWithValue--
-                    ){
-                        if($columns.Item($toLastColumnWithValue).value2 -join "" -notlike ""){
-                            break;
+                    # FindLastCellIgnoringFormatted
+                    else {
+                        # find the last row with value
+                        for(
+                            $height = $rows.count;
+                            $height -gt 0;
+                            $height--
+                        ){
+                            if($rows.Item($height).value2 -join "" -notlike ""){
+                                break
+                            }
                         }
-                    }
+                        if ($height -eq 0) {$lastY = 1} else {$lastY = $y + $height - 1}
 
-                    Set-Variable -Name "row"
-                    Set-Variable -Name "column"
-                    if($toLastRowWithValue -eq 0) {
-                        $row = 1;
-                    } else {
-                        $row = $_.UsedRange.Row + $toLastRowWithValue - 1
+                        # find the last column with value
+                        for(
+                            $width = $columns.count;
+                            $width -gt 0;
+                            $width--
+                        ){
+                            if($columns.Item($width).value2 -join "" -notlike ""){
+                                break
+                            }
+                        }
+                        if ($width -eq 0) {$lastX = 1} else {$lastX = $x + $width - 1}
                     }
-                    if($toLastColumnWithValue -eq 0) {
-                        $column = 1;
-                    } else {
-                        $column = $_.UsedRange.Column + $toLastColumnWithValue - 1
-                    }
-                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $row
-                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $column
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastRow" -Value $lastY
+                    Add-Member -InputObject $tmpObject -MemberType NoteProperty -Name "LastColumn" -Value $lastX
                 }
-                $tmpObject
+                return $tmpObject
             }
         } catch {
             Write-Error "An error happened while reading the file"
